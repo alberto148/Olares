@@ -1,0 +1,73 @@
+name: Sync Upstream Release Branches
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # Allow manual triggering
+
+jobs:
+  sync-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token:  ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/beclab/olares.git || true
+          git fetch upstream
+
+      - name: Get latest 3 release branches
+        id: get-branches
+        run: |
+          # Get all release branches from upstream, sort by version number, and take the latest 3
+          BRANCHES=$(git branch -r | grep 'upstream/release-' | sed 's|upstream/||' | sort -V -r | head -n 3)
+          echo "branches<<EOF" >> $GITHUB_OUTPUT
+          echo "$BRANCHES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Found branches to sync:"
+          echo "$BRANCHES"
+
+      - name: Sync release branches
+        run: |
+          BRANCHES="${{ steps.get-branches.outputs.branches }}"
+          
+          for branch in $BRANCHES; do
+            echo "Syncing branch: $branch"
+            
+            # Check if branch exists locally
+            if git show-ref --verify --quiet refs/heads/$branch; then
+              echo "Branch $branch exists locally, updating..."
+              git checkout $branch
+              git merge upstream/$branch --ff-only || {
+                echo "Fast-forward merge failed for $branch, trying reset..."
+                git reset --hard upstream/$branch
+              }
+            else
+              echo "Branch $branch does not exist locally, creating..."
+              git checkout -b $branch upstream/$branch
+            fi
+            
+            # Push to origin (your fork)
+            git push origin $branch --force
+            
+            echo "Successfully synced $branch"
+          done
+          
+          # Return to main branch
+          git checkout main
+
+      - name: Summary
+        run: |
+          echo "✅ Successfully synced the following branches:"
+          echo "${{ steps.get-branches.outputs.branches }}"
