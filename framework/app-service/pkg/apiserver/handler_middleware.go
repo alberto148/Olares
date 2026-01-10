@@ -8,14 +8,14 @@ import (
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/middlewareinstaller"
-	"bytetrade.io/web3os/app-service/pkg/tapr"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	"github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver/api"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	"github.com/beclab/Olares/framework/app-service/pkg/kubesphere"
+	"github.com/beclab/Olares/framework/app-service/pkg/middlewareinstaller"
+	"github.com/beclab/Olares/framework/app-service/pkg/tapr"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -150,7 +150,6 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 				if err != nil {
 					klog.Errorf("Failed to uninstall middleware err=%v", err)
 				}
-				utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.InstallOp), opID, v1alpha1.InstallFailed.String(), "", nil, "")
 			}
 		}
 	}()
@@ -172,7 +171,6 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.InstallOp), opID, v1alpha1.Installing.String(), "", nil, "")
 
 	klog.Infof("Start to install middleware name=%v", middlewareConfig.MiddlewareName)
 	err = middlewareinstaller.Install(req.Request.Context(), h.kubeConfig, middlewareConfig)
@@ -226,7 +224,7 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 						klog.Infof("Failed to update status err=%v", err)
 						return
 					}
-					utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.CancelOp), opID, v1alpha1.InstallingCanceled.String(), "", nil, "")
+
 					return
 				}
 				klog.Infof("ticker get middleware status")
@@ -245,8 +243,6 @@ func (h *Handler) installMiddleware(req *restful.Request, resp *restful.Response
 					e := apputils.UpdateStatus(a, opRecord.Status, &opRecord, opRecord.Message)
 					if e != nil {
 						klog.Error(e)
-					} else {
-						utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.InstallOp), opID, opRecord.Status.String(), "", nil, "")
 					}
 					delete(middlewareManager, name)
 					return
@@ -309,7 +305,6 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.UninstallOp), opID, v1alpha1.Uninstalling.String(), "", nil, "")
 
 	now = metav1.Now()
 	opRecord := v1alpha1.OpRecord{
@@ -327,8 +322,6 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 			e := apputils.UpdateStatus(mgr, v1alpha1.UninstallFailed, &opRecord, opRecord.Message)
 			if e != nil {
 				klog.Errorf("Failed to update applicationmanager status in uninstall middleware name=%s err=%v", mgr.Name, e)
-			} else {
-				utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.UninstallOp), opID, v1alpha1.UninstallFailed.String(), "", nil, "")
 			}
 		}
 	}()
@@ -344,7 +337,6 @@ func (h *Handler) uninstallMiddleware(req *restful.Request, resp *restful.Respon
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.Uninstalled), opID, v1alpha1.Uninstalled.String(), "", nil, "")
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
@@ -390,7 +382,6 @@ func (h *Handler) cancelMiddleware(req *restful.Request, resp *restful.Response)
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishMiddlewareEvent(owner, app, string(v1alpha1.CancelOp), opID, v1alpha1.InstallingCanceling.String(), "", nil, "")
 
 	resp.WriteAsJson(api.InstallationResponse{
 		Response: api.Response{Code: 200},

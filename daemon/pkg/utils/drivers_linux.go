@@ -119,7 +119,7 @@ func DetectdHddDevices(ctx context.Context) (usbDevs []storageDevice, err error)
 	return detectdStorageDevices(ctx, "ata")
 }
 
-func MonitorUsbDevice(ctx context.Context, cb func(action string) error) error {
+func MonitorUsbDevice(ctx context.Context, cb func(action, serial string) error) error {
 	filter := &usbmon.ActionFilter{Action: usbmon.ActionAll}
 	devs, err := usbmon.ListenFiltered(ctx, filter)
 	if err != nil {
@@ -137,8 +137,8 @@ func MonitorUsbDevice(ctx context.Context, cb func(action string) error) error {
 				fmt.Println("Path: " + dev.Path())
 				fmt.Println("Vendor: " + dev.Vendor())
 
-				if cb != nil {
-					err = cb(dev.Action())
+				if cb != nil && dev.Serial() != "" {
+					err = cb(dev.Action(), dev.Serial())
 					if err != nil {
 						klog.Error("usb action callback error, ", err, ", ", dev.Action())
 					}
@@ -195,6 +195,12 @@ func MountedHddPath(ctx context.Context) ([]string, error) {
 	}
 
 	return getMountedPath(hdds)
+}
+
+func FilterBySerial(serial string) func(dev storageDevice) bool {
+	return func(dev storageDevice) bool {
+		return strings.HasSuffix(serial, dev.IDSerial) || strings.HasSuffix(serial, dev.IDSerialShort)
+	}
 }
 
 func MountUsbDevice(ctx context.Context, mountBaseDir string, dev []storageDevice) (mountedPath []string, err error) {
@@ -267,7 +273,8 @@ func MountUsbDevice(ctx context.Context, mountBaseDir string, dev []storageDevic
 		if err = mounter.Mount(d.DevPath, mkMountDir, "", []string{"uid=1000", "gid=1000"}); err != nil {
 			klog.Warning("mount usb error, ", err, ", ", d.DevPath, ", ", mkMountDir)
 			// clear the empty mount dir
-			if err = os.RemoveAll(mkMountDir); err != nil {
+			// do not use remove all, only remove the mount point path, assume it's an empty dir
+			if err = os.Remove(mkMountDir); err != nil {
 				klog.Error("remove the mount dir error, ", err)
 			}
 
@@ -287,7 +294,8 @@ func umountAndRemovePath(ctx context.Context, path string) error {
 		return err
 	}
 
-	if err = os.RemoveAll(path); err != nil {
+	// do not use remove all, only remove the mount point path, assume it's an empty dir
+	if err = os.Remove(path); err != nil {
 		klog.Error("remove mount point error, ", err)
 	}
 
@@ -397,6 +405,11 @@ func UmountBrokenMount(ctx context.Context, baseDir string) error {
 
 				klog.Infof("broken mountpoint: %v, %v, %v", m.Path, m.Device, r.Reason)
 
+				if err = umountAndRemovePath(ctx, m.Path); err != nil {
+					return err
+				}
+			} else if !isDeviceExists(m.Device) {
+				klog.Infof("device not exists mountpoint: %v, %v", m.Path, m.Device)
 				if err = umountAndRemovePath(ctx, m.Path); err != nil {
 					return err
 				}
@@ -658,4 +671,17 @@ func checkMount(mountPoint string, timeout time.Duration) result {
 		}
 	}
 	return res
+}
+
+func isDeviceExists(devicePath string) bool {
+	if !strings.HasPrefix(devicePath, "/dev") {
+		return true
+	}
+
+	if strings.HasPrefix(devicePath, "/dev/mapper/") {
+		return true
+	}
+
+	_, err := os.Stat(devicePath)
+	return !os.IsNotExist(err)
 }

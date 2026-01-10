@@ -8,7 +8,7 @@ const side = {
       items: [
         // { text: "应用场景", link: "/zh/manual/why-olares" },
         //{ text: "功能对比", link: "/zh/manual/feature-overview" },
-        { text: "比较 Olares 和 NAS", link: "/zh/manual/olares-vs-nas" },
+        // { text: "比较 Olares 和 NAS", link: "/zh/manual/olares-vs-nas" },
         {text: "帮助与支持", link: "/zh/manual/help/request-technical-support",}
         //      collapsed: true,
         //      items: [
@@ -110,6 +110,10 @@ const side = {
           link: "/zh/manual/larepass/back-up-mnemonics",
         },
         {
+          text: "内网访问 Olares",
+          link: "zh/manual/get-started/local-access",
+        },
+        {
           text: "探索",
           link: "/zh/manual/get-started/next-steps",
         },
@@ -129,7 +133,7 @@ const side = {
             {text: "管理集成", link:"/zh/manual/larepass/integrations"},
           ],
         },
-        {text: "管理专用网络", link:"/zh/manual/larepass/private-network"},
+        {text: "使用专用网络", link:"/zh/manual/larepass/private-network"},
         {
           text: "管理设备",
           collapsed: true,
@@ -153,10 +157,10 @@ const side = {
             {text: "双重验证", link: "/zh/manual/larepass/two-factor-verification"},
           ],
         },
-        {
+        /*{
           text: "管理内容",
           link: "/zh/manual/larepass/manage-knowledge",
-        },
+        },*/
       ],
     },
     {
@@ -165,7 +169,24 @@ const side = {
       "link": "/zh/manual/olares/",
       "items": [
         { "text": "桌面", "link": "/zh/manual/olares/desktop" },
-        { "text": "应用市场", "link": "/zh/manual/olares/market" },
+        {
+          "text": "应用市场",
+          "collapsed": true,
+          "items": [
+            {
+              "text": "基本操作",
+              "link": "/zh/manual/olares/market/market"
+            },
+            {
+              "text": "管理付费应用",
+              "link": "/zh/manual/olares/market/purchase-paid-apps"
+            },
+            {
+              "text": "克隆应用",
+              "link": "/zh/manual/olares/market/clone-apps"
+            },
+          ],
+        },
         {
           "text": "文件管理器",
           "collapsed": true,
@@ -179,6 +200,14 @@ const side = {
             //   "text": "同步与共享",
           //  "link": "/zh/manual/larepass/sync-share"
             //  },
+            {
+              "text": "分享文件",
+              "link": "/zh/manual/olares/files/share-files"
+            },
+            {
+              "text": "同步文件至本地",
+              "link": "/zh/manual/olares/files/sync-files"
+            },
             {
               "text": "挂载 SMB",
               "link": "/zh/manual/olares/files/mount-SMB"
@@ -221,19 +250,34 @@ const side = {
               "text": "基本操作",
               "link": "/zh/manual/olares/wise/basics"
             },
-            {
+            /*{
               "text": "获取推荐引擎",
               "link": "/zh/manual/olares/wise/recommend"
-            },
+            },*/
             {
               "text": "管理订阅",
               "link": "/zh/manual/olares/wise/subscribe"
             },
             {
-              "text": "整理知识",
-              "link": "/zh/manual/olares/wise/filter"
+              text: "管理 Cookie",
+              link: "/zh/manual/olares/wise/manage-cookies",
+            },
+            {
+              "text": "管理知识",
+              "link": "/zh/manual/olares/wise/filter",
+              collapsed: true,
+              items:[
+            {
+              "text": "过滤语法参考",
+              "link": "/zh/manual/olares/wise/filter-syntax-guide"
+            },
+            {
+              "text": "过滤视图示例",
+              "link": "/zh/manual/olares/wise/filter-examples"
             }
-          ]
+            ],
+          },
+          ],
         },
         {
           "text": "控制面板",
@@ -325,6 +369,7 @@ const side = {
              },
             {text: "管理 GPU", link: "/zh/manual/olares/settings/gpu-resource"},
             {text: "视频设置", link: "/zh/manual/olares/settings/video"},
+            {text: "文件搜索", link: "/zh/manual/olares/settings/search"},
             {
               "text": "备份与恢复",
               "collapsed": true,
@@ -421,7 +466,7 @@ const side = {
   ],
   "/zh/use-cases/": [
     {
-      text: "Tutorials & use cases",
+      text: "应用示例",
       link: "/zh/use-cases/",
       items: [
         {
@@ -465,12 +510,22 @@ const side = {
         },
         {
           text: "Steam",
-          link: "/zh/use-cases/stream-game",
+          collapsed: true,
+          items: [
+            {
+              text: "在 Olares 本机游玩",
+              link: "/zh/use-cases/play-games-directly",
+            },
+            {
+              text: "串流到其他设备",
+              link: "/zh/use-cases/stream-game",
+            }
+          ]
         },
-        {
-          text: "Redroid",
-          link: "/zh/use-cases/host-cloud-android",
-        },
+        // {
+        //   text: "Redroid",
+        //   link: "/zh/use-cases/host-cloud-android",
+        // },
       ],
     },
   ],

@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	appevent "bytetrade.io/web3os/app-service/pkg/event"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	appv1alpha1 "github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	appevent "github.com/beclab/Olares/framework/app-service/pkg/event"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
 
 	refdocker "github.com/containerd/containerd/reference/docker"
 	corev1 "k8s.io/api/core/v1"
@@ -199,7 +199,7 @@ func (imc *ImageManagerClient) PollDownloadProgress(ctx context.Context, am *app
 
 			}
 			err = imc.updateProgress(ctx, am, &lastProgress, ret*100, am.Spec.OpType == appv1alpha1.UpgradeOp)
-			if err == nil && im.Status.State == "completed" {
+			if err == nil {
 				return nil
 			}
 

@@ -11,13 +11,13 @@ import (
 
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 
-	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	sysv1alpha1 "bytetrade.io/web3os/app-service/api/sys.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/controllers"
-	"bytetrade.io/web3os/app-service/pkg/apiserver"
-	appevent "bytetrade.io/web3os/app-service/pkg/event"
-	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/images"
+	appv1alpha1 "github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	sysv1alpha1 "github.com/beclab/Olares/framework/app-service/api/sys.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/controllers"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver"
+	appevent "github.com/beclab/Olares/framework/app-service/pkg/event"
+	"github.com/beclab/Olares/framework/app-service/pkg/generated/clientset/versioned"
+	"github.com/beclab/Olares/framework/app-service/pkg/images"
 
 	kbappsv1 "github.com/apecloud/kubeblocks/apis/apps/v1"
 	kbopv1alphav1 "github.com/apecloud/kubeblocks/apis/operations/v1alpha1"
@@ -138,9 +138,15 @@ func main() {
 		setupLog.Error(err, "Unable to create controller", "controller", "Security")
 		os.Exit(1)
 	}
-	appEventQueue := appevent.NewAppEventQueue(ictx)
+	appEventQueue := appevent.NewAppEventQueue(ictx, nil)
 	appevent.SetAppEventQueue(appEventQueue)
 	go appEventQueue.Run()
+
+	defer func() {
+		if nc := appEventQueue.GetNatsConn(); nc != nil {
+			nc.Drain()
+		}
+	}()
 
 	if err = (&controllers.ApplicationManagerController{
 		Client:      mgr.GetClient(),
@@ -198,6 +204,7 @@ func main() {
 	if err = (&controllers.NodeAlertController{
 		Client:     mgr.GetClient(),
 		KubeConfig: config,
+		NatsConn:   nil,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Unable to create controller", "controller", "NodeAlert")
 		os.Exit(1)

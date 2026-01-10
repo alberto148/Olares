@@ -8,24 +8,23 @@ import (
 	"strconv"
 	"strings"
 
-	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appstate"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/provider"
+	"github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver/api"
+	"github.com/beclab/Olares/framework/app-service/pkg/appcfg"
+	"github.com/beclab/Olares/framework/app-service/pkg/appstate"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	"github.com/beclab/Olares/framework/app-service/pkg/kubesphere"
+	"github.com/beclab/Olares/framework/app-service/pkg/provider"
+	"github.com/beclab/Olares/framework/app-service/pkg/users"
+	"github.com/beclab/Olares/framework/app-service/pkg/users/userspace"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils/config"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils/registry"
+	"github.com/beclab/Olares/framework/app-service/pkg/webhook"
 
-	"bytetrade.io/web3os/app-service/pkg/users"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	"bytetrade.io/web3os/app-service/pkg/utils/config"
-	"bytetrade.io/web3os/app-service/pkg/utils/registry"
-	"bytetrade.io/web3os/app-service/pkg/webhook"
-
-	appcfg_mod "bytetrade.io/web3os/app-service/pkg/appcfg"
 	wfv1alpha1 "github.com/argoproj/argo-workflows/v3/pkg/apis/workflow/v1alpha1"
+	appcfg_mod "github.com/beclab/Olares/framework/app-service/pkg/appcfg"
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/containerd/containerd/reference/docker"
 	"github.com/emicklei/go-restful/v3"
@@ -1088,14 +1087,13 @@ func (h *Handler) applicationManagerMutate(req *restful.Request, resp *restful.R
 	if !ok {
 		return
 	}
-	var pam *v1alpha1.ApplicationManager
 	var admissionReq, admissionResp admissionv1.AdmissionReview
 	proxyUUID := uuid.New()
 	if _, _, err := webhook.Deserializer.Decode(admissionRequestBody, nil, &admissionReq); err != nil {
 		klog.Errorf("Failed to decode admission request body err=%v", err)
 		admissionResp.Response = h.sidecarWebhook.AdmissionError("", err)
 	} else {
-		admissionResp.Response, pam = h.applicationManagerInject(req.Request.Context(), admissionReq.Request, proxyUUID)
+		admissionResp.Response, _ = h.applicationManagerInject(req.Request.Context(), admissionReq.Request, proxyUUID)
 	}
 	admissionResp.TypeMeta = admissionReq.TypeMeta
 	admissionResp.Kind = admissionReq.Kind
@@ -1108,18 +1106,6 @@ func (h *Handler) applicationManagerMutate(req *restful.Request, resp *restful.R
 	if err != nil {
 		klog.Errorf("Failed to write response[application-manager inject] admin review in namespace=%s err=%v", requestForNamespace, err)
 		return
-	}
-	if pam != nil {
-		utils.PublishAppEvent(utils.EventParams{
-			Owner:      pam.Spec.AppOwner,
-			Name:       pam.Spec.AppName,
-			OpType:     string(pam.Spec.OpType),
-			OpID:       pam.Status.OpID,
-			State:      pam.Status.State.String(),
-			RawAppName: pam.Spec.RawAppName,
-			Type:       pam.Spec.Type.String(),
-			Title:      apputils.AppTitle(pam.Spec.Config),
-		})
 	}
 
 	klog.Infof("Done[application-manager inject] with uuid=%s in namespace=%s", proxyUUID, requestForNamespace)
@@ -1382,12 +1368,12 @@ func (h *Handler) installOpValidate(ctx context.Context, appConfig *appcfg.Appli
 	if err != nil {
 		return err
 	}
-	_, err = apputils.CheckAppRequirement("", appConfig)
+	_, _, err = apputils.CheckAppRequirement("", appConfig, v1alpha1.InstallOp)
 	if err != nil {
 		return err
 	}
 
-	_, err = apputils.CheckUserResRequirement(ctx, appConfig, appConfig.OwnerName)
+	_, _, err = apputils.CheckUserResRequirement(ctx, appConfig, v1alpha1.InstallOp)
 	if err != nil {
 		return err
 	}

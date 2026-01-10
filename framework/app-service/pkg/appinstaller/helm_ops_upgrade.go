@@ -2,17 +2,15 @@ package appinstaller
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
-	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/generated/clientset/versioned"
-	"bytetrade.io/web3os/app-service/pkg/helm"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	helmrelease "helm.sh/helm/v3/pkg/release"
+	appv1alpha1 "github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/appcfg"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	"github.com/beclab/Olares/framework/app-service/pkg/generated/clientset/versioned"
+	"github.com/beclab/Olares/framework/app-service/pkg/helm"
+	"github.com/beclab/Olares/framework/app-service/pkg/users/userspace"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -23,15 +21,7 @@ import (
 
 // Upgrade do a upgrade operation for release.
 func (h *HelmOps) Upgrade() error {
-	status, err := h.status()
-	if err != nil {
-		klog.Errorf("get release status failed %v", err)
-		return err
-	}
-	if status.Info.Status == helmrelease.StatusDeployed {
-		return h.upgrade()
-	}
-	return fmt.Errorf("cannot upgrade release %s/%s, current state is %s", h.app.Namespace, h.app.AppName, status.Info.Status)
+	return h.upgrade()
 }
 
 func (h *HelmOps) upgrade() error {

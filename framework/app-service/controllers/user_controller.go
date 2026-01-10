@@ -8,11 +8,12 @@ import (
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/pkg/users"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace/v1"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	"bytetrade.io/web3os/app-service/pkg/utils/sliceutil"
+	natsevent "github.com/beclab/Olares/framework/app-service/pkg/event"
+	"github.com/beclab/Olares/framework/app-service/pkg/users"
+	"github.com/beclab/Olares/framework/app-service/pkg/users/userspace/v1"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils/sliceutil"
 
 	iamv1alpha2 "github.com/beclab/api/iam/v1alpha2"
 	"github.com/beclab/lldap-client/pkg/cache/memory"
@@ -165,7 +166,7 @@ func (r *UserController) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 				klog.Infof("update user failed %v", updateErr)
 				return ctrl.Result{}, updateErr
 			}
-			utils.PublishUserEvent("Delete", user.Name, user.Annotations[users.AnnotationUserDeleter])
+			r.publish("Delete", user.Name, user.Annotations[users.AnnotationUserDeleter])
 		}
 		return ctrl.Result{}, nil
 	}
@@ -299,9 +300,13 @@ func (r *UserController) handleUserCreation(ctx context.Context, user *iamv1alph
 		klog.Errorf("failed to update user status to Created %v", updateErr)
 	} else {
 		klog.Infof("publish user creation event.....")
-		utils.PublishUserEvent("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
+		r.publish("Create", user.Name, user.Annotations[users.AnnotationUserCreator])
 	}
 	return ctrl.Result{}, updateErr
+}
+
+func (r *UserController) publish(topic, user, operator string) {
+	natsevent.PublishUserEventToQueue(topic, user, operator)
 }
 
 func (r *UserController) checkResource(user *iamv1alpha2.User) error {

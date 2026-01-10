@@ -1,23 +1,26 @@
 package apiserver
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appstate"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	"github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver/api"
+	"github.com/beclab/Olares/framework/app-service/pkg/appcfg"
+	"github.com/beclab/Olares/framework/app-service/pkg/appstate"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	"github.com/beclab/Olares/framework/app-service/pkg/kubesphere"
+	"github.com/beclab/Olares/framework/app-service/pkg/users/userspace"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
 
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 )
 
 func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
@@ -72,23 +75,11 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(utils.EventParams{
-		Owner:      a.Spec.AppOwner,
-		Name:       a.Spec.AppName,
-		OpType:     string(a.Status.OpType),
-		OpID:       opID,
-		State:      v1alpha1.Stopping.String(),
-		RawAppName: a.Spec.RawAppName,
-		Type:       a.Spec.Type.String(),
-		Title:      apputils.AppTitle(a.Spec.Config),
-		Reason:     constants.AppStopByUser,
-		Message:    fmt.Sprintf("app %s was stop by user %s", a.Spec.AppName, a.Spec.AppOwner),
-	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},
@@ -99,6 +90,12 @@ func (h *Handler) suspend(req *restful.Request, resp *restful.Response) {
 func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	app := req.PathParameter(ParamAppName)
 	owner := req.Attribute(constants.UserContextAttribute).(string)
+	token, err := h.GetUserServiceAccountToken(req.Request.Context(), owner)
+	if err != nil {
+		klog.Error("Failed to get user service account token: ", err)
+		api.HandleError(resp, req, err)
+		return
+	}
 
 	name, err := apputils.FmtAppMgrName(app, owner, "")
 	if err != nil {
@@ -114,6 +111,36 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 	}
 	if !appstate.IsOperationAllowed(am.Status.State, v1alpha1.ResumeOp) {
 		api.HandleBadRequest(resp, req, fmt.Errorf("%s operation is not allowed for %s state", v1alpha1.ResumeOp, am.Status.State))
+		return
+	}
+	var appCfg *appcfg.ApplicationConfig
+	err = json.Unmarshal([]byte(am.Spec.Config), &appCfg)
+	if err != nil {
+		klog.Errorf("unmarshal to appConfig failed %v", err)
+		api.HandleError(resp, req, err)
+		return
+	}
+
+	resourceType, resourceConditionType, err := apputils.CheckAppRequirement(token, appCfg, v1alpha1.ResumeOp)
+	if err != nil {
+		klog.Errorf("Failed to check app requirement err=%v", err)
+		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
+			Response: api.Response{Code: 400},
+			Resource: resourceType.String(),
+			Message:  err.Error(),
+			Reason:   resourceConditionType.String(),
+		})
+		return
+	}
+
+	resourceType, resourceConditionType, err = apputils.CheckUserResRequirement(req.Request.Context(), appCfg, v1alpha1.ResumeOp)
+	if err != nil {
+		resp.WriteHeaderAndEntity(http.StatusBadRequest, api.RequirementResp{
+			Response: api.Response{Code: 400},
+			Resource: resourceType.String(),
+			Message:  err.Error(),
+			Reason:   resourceConditionType.String(),
+		})
 		return
 	}
 
@@ -144,22 +171,11 @@ func (h *Handler) resume(req *restful.Request, resp *restful.Response) {
 		StatusTime: &now,
 		UpdateTime: &now,
 	}
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(utils.EventParams{
-		Owner:      a.Spec.AppOwner,
-		Name:       a.Spec.AppName,
-		OpType:     string(a.Status.OpType),
-		OpID:       opID,
-		State:      v1alpha1.Resuming.String(),
-		RawAppName: a.Spec.RawAppName,
-		Type:       a.Spec.Type.String(),
-		Title:      apputils.AppTitle(a.Spec.Config),
-		Message:    fmt.Sprintf("app %s was resume by user %s", a.Spec.AppName, a.Spec.AppOwner),
-	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

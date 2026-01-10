@@ -8,15 +8,15 @@ import (
 	"strconv"
 	"time"
 
-	appv1alpha1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appstate"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/kubesphere"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
-	"bytetrade.io/web3os/app-service/pkg/utils/config"
+	appv1alpha1 "github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver/api"
+	"github.com/beclab/Olares/framework/app-service/pkg/appcfg"
+	"github.com/beclab/Olares/framework/app-service/pkg/appstate"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	"github.com/beclab/Olares/framework/app-service/pkg/kubesphere"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
+	"github.com/beclab/Olares/framework/app-service/pkg/utils/config"
 
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -146,6 +146,16 @@ func (h *upgradeHandlerHelper) setAndEncodingAppCofnig(prevCfg *appcfg.Applicati
 			}
 		}
 	}
+
+	prevPortsMap := apputils.BuildPrevPortsMap(prevCfg)
+
+	// Set expose ports for upgrade, preserving existing ports with same name
+	err := apputils.SetExposePorts(context.TODO(), h.appConfig, prevPortsMap)
+	if err != nil {
+		klog.Errorf("set expose ports failed %v", err)
+		return "", err
+	}
+
 	encoding, err := json.Marshal(h.appConfig)
 	if err != nil {
 		klog.Errorf("Failed to marshal app config err=%v", err)
@@ -374,21 +384,11 @@ func (h *Handler) appUpgrade(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 	}
 
-	am, err := apputils.UpdateAppMgrStatus(appMgrName, status)
+	_, err = apputils.UpdateAppMgrStatus(appMgrName, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(utils.EventParams{
-		Owner:      am.Spec.AppOwner,
-		Name:       am.Spec.AppName,
-		OpType:     string(am.Status.OpType),
-		OpID:       opID,
-		State:      appv1alpha1.Upgrading.String(),
-		RawAppName: am.Spec.RawAppName,
-		Type:       am.Spec.Type.String(),
-		Title:      apputils.AppTitle(am.Spec.Config),
-	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

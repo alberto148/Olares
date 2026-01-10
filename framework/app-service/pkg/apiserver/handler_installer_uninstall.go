@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"time"
 
-	"bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appstate"
-	"bytetrade.io/web3os/app-service/pkg/constants"
-	"bytetrade.io/web3os/app-service/pkg/users/userspace"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	"github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver/api"
+	"github.com/beclab/Olares/framework/app-service/pkg/appstate"
+	"github.com/beclab/Olares/framework/app-service/pkg/constants"
+	"github.com/beclab/Olares/framework/app-service/pkg/users/userspace"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
+
 	"github.com/emicklei/go-restful/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -72,6 +72,9 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		return
 	}
 	am.Spec.OpType = v1alpha1.UninstallOp
+	if am.Annotations == nil {
+		am.Annotations = make(map[string]string)
+	}
 	am.Annotations[api.AppTokenKey] = token
 	am.Annotations[api.AppUninstallAllKey] = fmt.Sprintf("%t", request.All)
 	err = h.ctrlClient.Update(req.Request.Context(), &am)
@@ -91,21 +94,11 @@ func (h *Handler) uninstall(req *restful.Request, resp *restful.Response) {
 		UpdateTime: &now,
 	}
 
-	a, err := apputils.UpdateAppMgrStatus(name, status)
+	_, err = apputils.UpdateAppMgrStatus(name, status)
 	if err != nil {
 		api.HandleError(resp, req, err)
 		return
 	}
-	utils.PublishAppEvent(utils.EventParams{
-		Owner:      a.Spec.AppOwner,
-		Name:       a.Spec.AppName,
-		OpType:     string(a.Status.OpType),
-		OpID:       opID,
-		State:      v1alpha1.Uninstalling.String(),
-		RawAppName: a.Spec.RawAppName,
-		Type:       a.Spec.Type.String(),
-		Title:      apputils.AppTitle(a.Spec.Config),
-	})
 
 	resp.WriteEntity(api.InstallationResponse{
 		Response: api.Response{Code: 200},

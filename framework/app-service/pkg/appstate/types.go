@@ -6,17 +6,20 @@ import (
 	"strings"
 	"time"
 
-	appsv1 "bytetrade.io/web3os/app-service/api/app.bytetrade.io/v1alpha1"
-	"bytetrade.io/web3os/app-service/pkg/apiserver/api"
-	"bytetrade.io/web3os/app-service/pkg/appcfg"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller"
-	"bytetrade.io/web3os/app-service/pkg/appinstaller/versioned"
-	appevent "bytetrade.io/web3os/app-service/pkg/event"
-	"bytetrade.io/web3os/app-service/pkg/utils"
-	apputils "bytetrade.io/web3os/app-service/pkg/utils/app"
+	appsv1 "github.com/beclab/Olares/framework/app-service/api/app.bytetrade.io/v1alpha1"
+	"github.com/beclab/Olares/framework/app-service/pkg/apiserver/api"
+	"github.com/beclab/Olares/framework/app-service/pkg/appcfg"
+	"github.com/beclab/Olares/framework/app-service/pkg/appinstaller"
+	"github.com/beclab/Olares/framework/app-service/pkg/appinstaller/versioned"
+	"github.com/beclab/Olares/framework/app-service/pkg/middlewareinstaller"
+	apputils "github.com/beclab/Olares/framework/app-service/pkg/utils/app"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	utilwait "k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -77,19 +80,6 @@ func (b *baseStatefulApp) updateStatus(ctx context.Context, am *appsv1.Applicati
 		klog.Errorf("patch appmgr's  %s status failed %v", am.Name, err)
 		return err
 	}
-	appevent.PublishAppEventToQueue(utils.EventParams{
-		Owner:      b.manager.Spec.AppOwner,
-		Name:       b.manager.Spec.AppName,
-		OpType:     string(b.manager.Spec.OpType),
-		OpID:       b.manager.Status.OpID,
-		State:      state.String(),
-		RawAppName: b.manager.Spec.RawAppName,
-		Type:       b.manager.Spec.Type.String(),
-		Title:      apputils.AppTitle(b.manager.Spec.Config),
-		Reason:     reason,
-		Message:    message,
-	})
-
 	return nil
 }
 
@@ -118,6 +108,10 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 		klog.Errorf("get kube config failed %v", err)
 		return err
 	}
+	if appCfg.MiddlewareName == "mongodb" && appCfg.Namespace == "os-platform" {
+		return p.oldMongodbUninstall(ctx, kubeConfig)
+	}
+
 	ops, err := versioned.NewHelmOps(ctx, kubeConfig, appCfg, token, appinstaller.Opt{MarketSource: p.manager.GetMarketSource()})
 	if err != nil {
 		klog.Errorf("make helm ops failed %v", err)
@@ -130,12 +124,45 @@ func (p *baseStatefulApp) forceDeleteApp(ctx context.Context) error {
 			return err
 		}
 	}
+
+	// Wait for namespace to be fully deleted before updating status
+	if err = p.waitForNamespaceDeleted(ctx); err != nil {
+		klog.Errorf("wait for namespace %s deleted failed %v", p.manager.Spec.AppNamespace, err)
+		return err
+	}
+
 	err = p.updateStatus(ctx, p.manager, appsv1.Uninstalled, nil, appsv1.Uninstalled.String(), "")
 	if err != nil {
 		klog.Errorf("update app manager %s to state %s failed", p.manager.Name, appsv1.Uninstalled)
 		return err
 	}
 	return nil
+}
+
+// waitForNamespaceDeleted waits for the namespace to be completely deleted
+func (p *baseStatefulApp) waitForNamespaceDeleted(ctx context.Context) error {
+	namespace := p.manager.Spec.AppNamespace
+	if apputils.IsProtectedNamespace(namespace) {
+		return nil
+	}
+
+	klog.Infof("waiting for namespace %s to be fully deleted", namespace)
+	err := utilwait.PollImmediate(time.Second, 30*time.Minute, func() (done bool, err error) {
+		var ns corev1.Namespace
+		err = p.client.Get(ctx, types.NamespacedName{Name: namespace}, &ns)
+		if err != nil && !apierrors.IsNotFound(err) {
+			klog.Errorf("failed to get namespace %s: %v", namespace, err)
+			return false, err
+		}
+		if apierrors.IsNotFound(err) {
+			klog.Infof("namespace %s has been fully deleted", namespace)
+			return true, nil
+		}
+		klog.Infof("namespace %s still exists, waiting...", namespace)
+		return false, nil
+	})
+
+	return err
 }
 
 type OperationApp interface {
@@ -243,4 +270,32 @@ func (p *basePollableStatefulInProgressApp) CreatePollContext() context.Context 
 	p.ctxPoll = pollCtx
 
 	return pollCtx
+}
+
+func (b *baseStatefulApp) oldMongodbUninstall(ctx context.Context, kubeConfig *rest.Config) error {
+	mc := &middlewareinstaller.MiddlewareConfig{
+		MiddlewareName: b.manager.Spec.AppName,
+		Namespace:      b.manager.Spec.AppNamespace,
+		OwnerName:      b.manager.Spec.AppOwner,
+	}
+	err := middlewareinstaller.Uninstall(ctx, kubeConfig, mc)
+	if err != nil && err.Error() != "failed to delete release: mongodb" {
+		klog.Errorf("failed to uninstall old mongodb %v", err)
+		return err
+	}
+	var secret corev1.Secret
+
+	err = b.client.Get(ctx, types.NamespacedName{Name: "sh.helm.release.v1.mongodb.v1", Namespace: mc.Namespace}, &secret)
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err = b.client.Delete(ctx, &secret); err != nil && !apierrors.IsNotFound(err) {
+		klog.Errorf("failed to delete mongodb release secret: %s", secret.Name)
+		return err
+	}
+
+	return nil
 }
